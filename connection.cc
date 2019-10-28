@@ -189,6 +189,10 @@ void connection::write_buf()
 
 void connection::send(const std::string& message)
 {
+    if (_closed)
+    {
+        return;
+    }
     size_t s = message.size();
     if (output_buffer.size() - output_index_ < s)
     {
