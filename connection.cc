@@ -28,11 +28,12 @@ connection::~connection()
 
 std::string connection::to_string()
 {
-    char buf[64] = { 0 };
+    char buf[64] = {0};
     size_t size = sizeof buf;
     ::inet_ntop(AF_INET, &peer_addr_.sin_addr, buf, static_cast<socklen_t>(size));
     uint16_t port = be16toh(peer_addr_.sin_port);
     std::string tcp(buf);
+    tcp += " : ";
     tcp += std::to_string(port);
     return tcp;
 }
@@ -91,7 +92,7 @@ void connection::call_back()
 
 ssize_t connection::readv_buff()
 {
-    char extrabuf[65536] = { 0 };
+    char extrabuf[65536] = {0};
     ssize_t total_size = 0;
     ssize_t writable = 0;
     while (true)
@@ -117,7 +118,7 @@ ssize_t connection::readv_buff()
         {
             size_t extrabuf_len = n - writable;
             size_t extern_size = input_index_ + n;
-            input_buffer.resize(extern_size); // input_index_ + n
+            input_buffer.resize(extern_size);  // input_index_ + n
             std::copy(extrabuf, extrabuf + extrabuf_len, input_buffer.data() + writable);
         }
         total_size += n;
@@ -140,7 +141,7 @@ void connection::close()
         return;
     }
     cancle();
-    if (::shutdown(_fd, SHUT_WR) < 0) // close(_fd);  //Linux 3.7
+    if (::shutdown(_fd, SHUT_WR) < 0)  // close(_fd);  //Linux 3.7
     {
         LOG << "shot down : " << error_message();
     }
