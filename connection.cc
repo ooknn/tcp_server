@@ -77,6 +77,8 @@ void connection::call_back()
         if (n == 0)
         {
             _on_close(shared_from_this());
+            //
+            close();
         }
         else if (n > 0)
         {
@@ -134,7 +136,7 @@ void connection::cancle()
     update();
 }
 
-void connection::close()
+void connection::shutdown()
 {
     if (_closed)
     {
@@ -142,6 +144,21 @@ void connection::close()
     }
     cancle();
     if (::shutdown(_fd, SHUT_WR) < 0)  // close(_fd);  //Linux 3.7
+    {
+        LOG << "shot down : " << error_message();
+    }
+
+    _closed = true;
+}
+
+void connection::close()
+{
+    if (_closed)
+    {
+        return;
+    }
+    cancle();
+    if (::close(_fd) < 0)  // close(_fd);  //Linux 3.7
     {
         LOG << "shot down : " << error_message();
     }

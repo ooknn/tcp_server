@@ -30,6 +30,7 @@ public:
     void set_on_close(close_call_back call) { _on_close = call; }
     bool connected() { return !_closed; };
     void close();
+    void shutdown();
 
 private:
     void peer_address();
