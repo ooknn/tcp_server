@@ -71,12 +71,12 @@ private:
 
 private:
     int _fd;
-    int _ev; // event
+    int _ev;  // event
     ssize_t input_index_;
     ssize_t output_index_;
     struct sockaddr_in peer_addr_;
     struct sockaddr_in local_addr_;
-    std::vector<uint8_t> input_buffer; //
+    std::vector<uint8_t> input_buffer;  //
     std::vector<uint8_t> output_buffer;
     close_call_back _on_close;
     message_call_back _on_message;
@@ -84,4 +84,4 @@ private:
     bool _closed;
     io_context* _context;
 };
-#endif // CONNECTION_H_
+#endif  // CONNECTION_H_

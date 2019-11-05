@@ -8,35 +8,35 @@
 #include "log.h"
 
 const char* option_str = "OPTIONS %s RTSP/1.0\r\n"
-"CSeq:%d\r\n"
-"User-Agent: rtsp client(ok)"
-"\r\n"
-"\r\n";
+                         "CSeq:%d\r\n"
+                         "User-Agent: rtsp client(ok)"
+                         "\r\n"
+                         "\r\n";
 
 const char* describe_str = "DESCRIBE %s RTSP/1.0\r\n"
-"CSeq:%d\r\n"
-"User-Agent: rtsp client(ok)"
-"\r\n"
-"\r\n";
+                           "CSeq:%d\r\n"
+                           "User-Agent: rtsp client(ok)"
+                           "\r\n"
+                           "\r\n";
 
 const char* setup_str = "SETUP %s/%s RTSP/1.0\r\n"
-"CSeq: %d\r\n"
-"User-Agent: rtsp client(ok)"
-"\r\n"
-"Transport: RTP/AVP/TCP;unicast;interleaved=%d-%d\r\n";
+                        "CSeq: %d\r\n"
+                        "User-Agent: rtsp client(ok)"
+                        "\r\n"
+                        "Transport: RTP/AVP/TCP;unicast;interleaved=%d-%d\r\n";
 
 const char* play_str = "PLAY %s RTSP/1.0\r\n"
-"CSeq: %d\r\n"
-"User-Agent: rtsp clinet(ok)\r\n"
-"%s"
-"Range: npt=0.000-\r\n"
-"\r\n";
+                       "CSeq: %d\r\n"
+                       "User-Agent: rtsp clinet(ok)\r\n"
+                       "%s"
+                       "Range: npt=0.000-\r\n"
+                       "\r\n";
 
 const char* teardown_str = "TEARDOWN %s RTSP/1.0\r\n"
-"CSeq: %d\r\n"
-"User-Agent: rtsp clinet(ok)\r\n"
-"%s"
-"\r\n";
+                           "CSeq: %d\r\n"
+                           "User-Agent: rtsp clinet(ok)\r\n"
+                           "%s"
+                           "\r\n";
 
 using StringS = std::vector<std::string>;
 
@@ -106,7 +106,7 @@ static void ParseRtspUrl(const std::string& url, std::string* ip, uint16_t* port
 
 RtspTcpClient::RtspTcpClient(io_context* context, const std::string& url)
     : rtsp_url_(url)
-      , t_(context)
+    , t_(context)
 {
     ParseRtspUrl(rtsp_url_, &ip_, &port_);
     LOG << ip_ << " : " << port_;
@@ -114,11 +114,11 @@ RtspTcpClient::RtspTcpClient(io_context* context, const std::string& url)
     assert(port_ > 0);
     c_ = std::make_unique<client>(context, ip_, port_);
     c_->set_on_message(
-            std::bind(&RtspTcpClient::on_message, this, std::placeholders::_1));
+        std::bind(&RtspTcpClient::on_message, this, std::placeholders::_1));
     c_->set_on_connect(
-            std::bind(&RtspTcpClient::on_connect, this, std::placeholders::_1));
+        std::bind(&RtspTcpClient::on_connect, this, std::placeholders::_1));
     c_->set_on_close(
-            std::bind(&RtspTcpClient::on_close, this, std::placeholders::_1));
+        std::bind(&RtspTcpClient::on_close, this, std::placeholders::_1));
 }
 
 void RtspTcpClient::connect() { c_->connect(); }
@@ -160,8 +160,8 @@ void RtspTcpClient::send_options(const connection_ptr& conn)
     snprintf(buffer, sizeof buffer, option_str, rtsp_url_.data(), ++seq_);
 
     funcs_.emplace(sequence(), [&](const Response& response) {
-            options_response(conn, response);
-            });
+        options_response(conn, response);
+    });
     LOG << buffer;
     conn->send(buffer);
 }
@@ -171,8 +171,8 @@ void RtspTcpClient::send_describe(const connection_ptr& conn)
     char buffer[2048 / 2] = {0};
     snprintf(buffer, sizeof buffer, describe_str, rtsp_url_.data(), ++seq_);
     funcs_.emplace(sequence(), [&](const Response& response) {
-            describe_response(conn, response);
-            });
+        describe_response(conn, response);
+    });
     LOG << buffer;
     conn->send(buffer);
 }
@@ -210,8 +210,8 @@ void RtspTcpClient::send_setup(const connection_ptr& conn, const Media& media)
 
     //
     funcs_.emplace(sequence(), [&](const Response& response) {
-            setup_response(conn, response);
-            });
+        setup_response(conn, response);
+    });
 
     //
     LOG << setup_session;
@@ -267,14 +267,14 @@ void RtspTcpClient::send_play(const connection_ptr& conn)
     snprintf(buffer, sizeof buffer, play_str, rtsp_url_.data(), ++seq_, session_id().data());
 
     funcs_.emplace(sequence(), [&](const Response& response) {
-            play_response(conn, response);
-            });
+        play_response(conn, response);
+    });
     // set stream data call back
     conn->set_on_message([&](const connection_ptr& conn) {
-            auto data = conn->readAll();
-            push_data(data);
-            parse_data();
-            });
+        auto data = conn->readAll();
+        push_data(data);
+        parse_data();
+    });
 
     LOG << buffer;
     conn->send(buffer);
@@ -292,13 +292,13 @@ void RtspTcpClient::send_teardown(const connection_ptr& conn)
     snprintf(buffer, sizeof buffer, teardown_str, rtsp_url_.data(), ++seq_, session_id().data());
 
     funcs_.emplace(sequence(), [&](const Response& response) {
-            teardown_response(conn, response);
-            });
+        teardown_response(conn, response);
+    });
     conn->set_on_message([&](const connection_ptr& conn) {
-            std::string tear_str = conn->readAll();
-            LOG << tear_str;
-            conn->close();
-            });
+        std::string tear_str = conn->readAll();
+        LOG << tear_str;
+        conn->close();
+    });
     LOG << buffer;
     conn->send(buffer);
 }
@@ -374,7 +374,7 @@ void RtspTcpClient::parse_rtsp_command()
         {
             // 0xFF and 0xFE are used as special signaling characters
             //stream_data_.erase(stream_data_.begin());
-            std::copy(stream_data_.begin()+1,stream_data_.end(),stream_data_.begin());
+            std::copy(stream_data_.begin() + 1, stream_data_.end(), stream_data_.begin());
             return;
         }
         assert(ch != '$');
@@ -457,7 +457,7 @@ std::optional<RtspTcpClient::Media> RtspTcpClient::parse_media(const std::string
         }
 
         if (sscanf(attr.data(), "a=rtpmap: %u %[^/]/%u", &format, codec_name, &frequency) == 3
-                || sscanf(attr.data(), "a=rtpmap: %u %[^/]/%u/%u", &format, codec_name, &frequency, &channels) == 4)
+            || sscanf(attr.data(), "a=rtpmap: %u %[^/]/%u/%u", &format, codec_name, &frequency, &channels) == 4)
         {
             continue;
         }
@@ -475,7 +475,7 @@ std::optional<RtspTcpClient::Media> RtspTcpClient::parse_media(const std::string
 }
 
 std::optional<Response> RtspTcpClient::parse_response(
-        const std::string& response)
+    const std::string& response)
 {
     uint64_t response_seq = 0;
     std::string response_body;
@@ -502,8 +502,8 @@ std::optional<Response> RtspTcpClient::parse_response(
         }
         std::string seq = response.substr(pos + CSeq.size());
         auto it = std::find_if(seq.begin(), seq.end(), [](char ch) {
-                return ch == '\n' || ch == '\r';
-                });
+            return ch == '\n' || ch == '\r';
+        });
         if (it == seq.end())
         {
             LOG << "CSeq invalid\n"
@@ -522,8 +522,8 @@ std::optional<Response> RtspTcpClient::parse_response(
         {
             std::string session_str = response.substr(pos);
             auto it = std::find_if(session_str.begin(), session_str.end(), [](char ch) {
-                    return ch == '\n' || ch == '\r';
-                    });
+                return ch == '\n' || ch == '\r';
+            });
             if (it != session_str.end())
             {
                 session = session_str.substr(0, it - session_str.begin());
@@ -546,8 +546,8 @@ std::optional<Response> RtspTcpClient::parse_response(
             std::string sub = response.substr(pos + content_length.size());
             assert(sub.empty() == false);
             auto it = std::find_if(sub.begin(), sub.end(), [](char ch) {
-                    return ch == '\n' || ch == '\r';
-                    });
+                return ch == '\n' || ch == '\r';
+            });
             if (it == sub.end())
             {
                 LOG << "content_length invalid\n"

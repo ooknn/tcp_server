@@ -33,9 +33,9 @@ private:
 private:
     int _epoll_fd;
     event_list _events;
-    call_list _calls; // timerfd or socket fd
-    std::vector<call_back_type> _pending_funcs; //  other  function
+    call_list _calls;                            // timerfd or socket fd
+    std::vector<call_back_type> _pending_funcs;  //  other  function
     int _epoll_time_out = -1;
 };
 
-#endif // IO_CONTEXT_H_
+#endif  // IO_CONTEXT_H_

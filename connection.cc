@@ -6,7 +6,7 @@
 
 connection::connection(io_context* context, int fd)
     : _fd(fd)
-      , _context(context)
+    , _context(context)
 {
     input_buffer.resize(kInitSize);
     output_buffer.reserve(kInitSize);
@@ -53,7 +53,7 @@ void connection::local_address()
     memset(&local_addr_, 0, sizeof local_addr_);
     socklen_t addrlen = static_cast<socklen_t>(sizeof local_addr_);
     if (::getsockname(_fd, static_cast<struct sockaddr*>(static_cast<void*>(&local_addr_)), &addrlen)
-            < 0)
+        < 0)
     {
         LOG << " failed";
     }
@@ -117,21 +117,31 @@ ssize_t connection::readv_buff()
             return n;
         }
         size_t space = input_buffer.size() - input_index_;
-        if( space < static_cast<size_t>(n)  )
+        if (space < static_cast<size_t>(n))
         {
             input_buffer.resize(input_index_ + n);
         }
-        if(static_cast<size_t>(n) >= extrabuf_len)
+        else
         {
-            assert(input_buffer.size() - input_index_ >= static_cast<size_t>(n) );
+            // narrow space
+            if (space > static_cast<size_t>(2 * input_index_))
+            {
+                input_buffer.resize(2 * input_index_);
+            }
+        }
+        if (static_cast<size_t>(n) >= extrabuf_len)
+        {
+            assert(input_buffer.size() - input_index_ >= static_cast<size_t>(n));
             size_t buf1_len = extrabuf_len;
             size_t buf2_len = n - buf1_len;
             std::copy(extrabuf1, extrabuf1 + buf1_len, input_buffer.begin() + input_index_);
             input_index_ += buf1_len;
-            std::copy(extrabuf2, extrabuf2 + buf2_len, input_buffer.begin()+input_index_);
+            std::copy(extrabuf2, extrabuf2 + buf2_len, input_buffer.begin() + input_index_);
             input_index_ += buf2_len;
-        }else{
-            std::copy(extrabuf1, extrabuf1 + n, input_buffer.begin()+input_index_);
+        }
+        else
+        {
+            std::copy(extrabuf1, extrabuf1 + n, input_buffer.begin() + input_index_);
             input_index_ += n;
         }
 
@@ -240,7 +250,7 @@ std::string connection::readNByte(int n)
         return "";
     }
 
-    assert(input_buffer.size() > static_cast<size_t>(n));
+    assert(input_index_ > static_cast<ssize_t>(n));
     std::string str(input_buffer.begin(), input_buffer.begin() + n);
     std::copy(input_buffer.begin() + n, input_buffer.end(), input_buffer.begin());
     input_index_ -= n;
@@ -249,7 +259,7 @@ std::string connection::readNByte(int n)
 
 std::string connection::readAll()
 {
-    std::string str(input_buffer.begin(), input_buffer.begin()+input_index_);
+    std::string str(input_buffer.begin(), input_buffer.begin() + input_index_);
     input_buffer.clear();
     input_index_ = 0;
     return str;
