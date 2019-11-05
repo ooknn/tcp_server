@@ -76,8 +76,8 @@ private:
     ssize_t output_index_;
     struct sockaddr_in peer_addr_;
     struct sockaddr_in local_addr_;
-    std::vector<char> input_buffer; //
-    std::vector<char> output_buffer;
+    std::vector<uint8_t> input_buffer; //
+    std::vector<uint8_t> output_buffer;
     close_call_back _on_close;
     message_call_back _on_message;
     //  size_t _length;

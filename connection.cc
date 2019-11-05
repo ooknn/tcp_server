@@ -2,10 +2,11 @@
 #include "error.h"
 #include "io_context.h"
 #include "log.h"
+#include <assert.h>
 
 connection::connection(io_context* context, int fd)
     : _fd(fd)
-    , _context(context)
+      , _context(context)
 {
     input_buffer.resize(kInitSize);
     output_buffer.reserve(kInitSize);
@@ -52,7 +53,7 @@ void connection::local_address()
     memset(&local_addr_, 0, sizeof local_addr_);
     socklen_t addrlen = static_cast<socklen_t>(sizeof local_addr_);
     if (::getsockname(_fd, static_cast<struct sockaddr*>(static_cast<void*>(&local_addr_)), &addrlen)
-        < 0)
+            < 0)
     {
         LOG << " failed";
     }
@@ -94,17 +95,17 @@ void connection::call_back()
 
 ssize_t connection::readv_buff()
 {
-    char extrabuf[65536] = {0};
     ssize_t total_size = 0;
-    ssize_t writable = 0;
     while (true)
     {
-        writable = input_buffer.size() - input_index_;
+        char extrabuf1[65536] = {0};
+        char extrabuf2[65536] = {0};
+        size_t extrabuf_len = sizeof extrabuf1;
         struct iovec vec[2];
-        vec[0].iov_base = input_buffer.data() + input_index_;
-        vec[0].iov_len = writable;
-        vec[1].iov_base = extrabuf;
-        vec[1].iov_len = sizeof extrabuf;
+        vec[0].iov_base = extrabuf1;
+        vec[0].iov_len = extrabuf_len;
+        vec[1].iov_base = extrabuf2;
+        vec[1].iov_len = extrabuf_len;
         const int iovcnt = 2;
         const ssize_t n = ::readv(_fd, vec, iovcnt);
         if (n <= 0)
@@ -115,17 +116,28 @@ ssize_t connection::readv_buff()
             }
             return n;
         }
-
-        if (n >= writable)
+        size_t space = input_buffer.size() - input_index_;
+        if( space < static_cast<size_t>(n)  )
         {
-            size_t extrabuf_len = n - writable;
-            size_t extern_size = input_index_ + n;
-            input_buffer.resize(extern_size);  // input_index_ + n
-            std::copy(extrabuf, extrabuf + extrabuf_len, input_buffer.data() + writable);
+            input_buffer.resize(input_index_ + n);
         }
+        if(static_cast<size_t>(n) >= extrabuf_len)
+        {
+            assert(input_buffer.size() - input_index_ >= static_cast<size_t>(n) );
+            size_t buf1_len = extrabuf_len;
+            size_t buf2_len = n - buf1_len;
+            std::copy(extrabuf1, extrabuf1 + buf1_len, input_buffer.begin() + input_index_);
+            input_index_ += buf1_len;
+            std::copy(extrabuf2, extrabuf2 + buf2_len, input_buffer.begin()+input_index_);
+            input_index_ += buf2_len;
+        }else{
+            std::copy(extrabuf1, extrabuf1 + n, input_buffer.begin()+input_index_);
+            input_index_ += n;
+        }
+
         total_size += n;
-        input_index_ += n;
-        LOG << "readv total_size " << total_size << " input_buffer size " << input_buffer.size();
+        LOG << "readv size " << n << " total_size " << total_size
+            << " input_buffer size " << input_buffer.size() << " input_index_ " << input_index_;
     }
     return total_size;
 }
@@ -227,16 +239,18 @@ std::string connection::readNByte(int n)
     {
         return "";
     }
+
+    assert(input_buffer.size() > static_cast<size_t>(n));
     std::string str(input_buffer.begin(), input_buffer.begin() + n);
     std::copy(input_buffer.begin() + n, input_buffer.end(), input_buffer.begin());
-    input_index_ = input_buffer.size();
+    input_index_ -= n;
     return str;
 }
 
 std::string connection::readAll()
 {
-    std::string str(input_buffer.begin(), input_buffer.end());
+    std::string str(input_buffer.begin(), input_buffer.begin()+input_index_);
     input_buffer.clear();
-    input_index_ = input_buffer.size();
+    input_index_ = 0;
     return str;
 }
