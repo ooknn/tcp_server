@@ -98,6 +98,7 @@ private:
     TcpClientPrt c_;
     timer t_;
     bool split_ = false;
+    bool idr_ = false;
     std::string session_id_;  // setup session
     MediaArr medias_;
     MediaMap medias_map_;  // rtp channel media

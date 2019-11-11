@@ -438,6 +438,14 @@ void RtspTcpClient::parse_frame_nal(const H264Frame& frame)
     LOG << "----------------------> nal type " << std::to_string(nal_type);
     switch (nal_type)
     {
+        case 5:
+        case 7:
+        case 8:
+        {
+            idr_ = true;
+            h264_stream_.push_back(frame);
+            break;
+        }
         case 28:
         case 29:
         {
@@ -455,15 +463,18 @@ void RtspTcpClient::parse_frame_nal(const H264Frame& frame)
                 split_frame_.push_back(byte);
                 split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
             }
-            if(endBit)
+            if (endBit)
             {
                 assert(split_ == true);
                 split_ = false;
                 split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
-                h264_stream_.push_back(split_frame_);
+                if (idr_)
+                {
+                    h264_stream_.push_back(split_frame_);
+                }
                 split_frame_.clear();
             }
-            if(endBit == 0 && startBit == 0)
+            if (endBit == 0 && startBit == 0)
             {
                 assert(split_ == true);
                 split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
@@ -474,7 +485,10 @@ void RtspTcpClient::parse_frame_nal(const H264Frame& frame)
         {
             if (nal_type < 20)
             {
-                h264_stream_.push_back(frame);
+                if (idr_)
+                {
+                    h264_stream_.push_back(frame);
+                }
             }
             break;
         }
