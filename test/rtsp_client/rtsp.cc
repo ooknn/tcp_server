@@ -7,6 +7,11 @@
 #include "io_context.h"
 #include "log.h"
 
+const static int VIDEO_RTP_CHANNEL = 0;
+const static int VIDEO_RTCP_CHANNEL = 1;
+const static int AUDIO_RTP_CHANNEL = 2;
+const static int AUDIO_RTCP_CHANNEL = 3;
+
 const char* option_str = "OPTIONS %s RTSP/1.0\r\n"
                          "CSeq:%d\r\n"
                          "User-Agent: rtsp client(ok)"
@@ -40,7 +45,7 @@ const char* teardown_str = "TEARDOWN %s RTSP/1.0\r\n"
 
 using StringS = std::vector<std::string>;
 
-void split(const std::string& str, StringS* ss, const std::string& delimiters)
+static void split(const std::string& str, StringS* ss, const std::string& delimiters)
 {
     StringS methods;
     std::string::size_type p = 0;
@@ -196,11 +201,11 @@ std::string RtspTcpClient::session_id()
 
 void RtspTcpClient::send_setup(const connection_ptr& conn, const Media& media)
 {
-    LOG << media.to_string();
 
     char buffer[1024] = {0};
     uint8_t rtp_number = stream_id_count_++;
     uint8_t rtcp_number = stream_id_count_++;
+    medias_map_.insert(std::make_pair(rtp_number, media));
     snprintf(buffer, sizeof buffer, setup_str, rtsp_url_.data(), media.control_path.data(), ++seq_, rtp_number, rtcp_number);
     // TODO
 
@@ -283,7 +288,30 @@ void RtspTcpClient::send_play(const connection_ptr& conn)
 void RtspTcpClient::play_response(const connection_ptr& conn, const Response& response)
 {
     // receive 3 seconds video streaming
-    t_.set(3, [&]() { send_teardown(conn); });
+    t_.set(13, [&]() { send_teardown(conn); });
+}
+
+static void write_h264_stream_to_file(H264Stream& s)
+{
+    unsigned char const start_code[4] = {0x00, 0x00, 0x00, 0x01};
+    uint64_t t = time(NULL);
+    std::string filename = std::to_string(t);
+    filename += ".264";
+    FILE* fp = fopen(filename.data(), "wb");
+    assert(fp);
+    fwrite(start_code, 1, 4, fp);
+    for (const auto& v : s)
+    {
+        if (v.empty())
+        {
+            continue;
+        }
+
+        fwrite(start_code, 1, 4, fp);
+        fwrite(v.data(), 1, v.size(), fp);
+    }
+
+    fclose(fp);
 }
 
 void RtspTcpClient::send_teardown(const connection_ptr& conn)
@@ -298,6 +326,9 @@ void RtspTcpClient::send_teardown(const connection_ptr& conn)
         std::string tear_str = conn->readAll();
         LOG << tear_str;
         conn->close();
+        LOG << "h264 frames size" << h264_frames_.size();
+
+        write_h264_stream_to_file(h264_stream_);
     });
     LOG << buffer;
     conn->send(buffer);
@@ -311,6 +342,161 @@ void RtspTcpClient::push_data(const std::string& data)
 int RtspTcpClient::stream_channel(uint8_t ch)
 {
     return ch;
+}
+
+void RtspTcpClient::parse_rtp_header(const RtpPacket& pkt)
+{
+
+    if (pkt.size() < 12)
+    {
+        return;
+    }
+    const uint8_t* ptr = pkt.data();
+    uint32_t frame_size = pkt.size();
+    uint32_t rtpHdr = ntohl(*(uint32_t*)(ptr));
+    ptr += 4;
+    frame_size -= 4;
+    bool rtpMarkerBit = (rtpHdr & 0x00800000) != 0;
+    uint32_t rtpTimestamp = ntohl(*(uint32_t*)(ptr));
+    ptr += 4;
+    frame_size -= 4;
+    uint32_t rtpSSRC = ntohl(*(uint32_t*)(ptr));
+    ptr += 4;
+    frame_size -= 4;
+    // Check the RTP version number (it should be 2):
+    if ((rtpHdr & 0xC0000000) != 0x80000000)
+    {
+        assert(false);
+        return;
+    }
+    uint8_t rtpPayloadType = (uint8_t)((rtpHdr & 0x007F0000) >> 16);
+    //    assert(media.format == rtpPayloadType);
+    // Skip over any CSRC identifiers in the header:
+    unsigned cc = (rtpHdr >> 24) & 0x0F;
+    if (frame_size < cc * 4)
+    {
+        assert(false);
+        return;
+    }
+
+    ptr += cc * 4;
+    frame_size -= cc * 4;
+
+    // Check for (& ignore) any RTP header extension
+    if (rtpHdr & 0x10000000)
+    {
+        if (frame_size < 4)
+        {
+            assert(false);
+            return;
+        }
+        unsigned extHdr = ntohl(*(u_int32_t*)(ptr));
+        ptr += 4;
+        frame_size -= 4;
+        unsigned remExtSize = 4 * (extHdr & 0xFFFF);
+        if (frame_size < remExtSize)
+        {
+            assert(false);
+            return;
+        }
+        ptr += remExtSize;
+    }
+    // Discard any padding bytes:
+    uint16_t numPaddingBytes = 0;
+    if (rtpHdr & 0x20000000)
+    {
+        if (frame_size == 0)
+        {
+            assert(false);
+            return;
+        }
+        // uint16_t ?
+        numPaddingBytes = (uint16_t)((ptr)[frame_size - 1]);
+        if (frame_size < numPaddingBytes)
+        {
+            assert(false);
+            return;
+        }
+    }
+    uint16_t rtpSeqNo = (uint16_t)(rtpHdr & 0xFFFF);
+
+    uint32_t skip = ptr - pkt.data();
+
+    h264_frames_.push_back({pkt.begin() + skip, pkt.end() - numPaddingBytes});
+
+    LOG << "rtpHdr " << rtpHdr << " rtpMarkerBit " << rtpMarkerBit << " rtpTimestamp " << rtpTimestamp << " rtpSSRC " << rtpSSRC << " rtpPayloadType --> " << std::to_string(rtpPayloadType) << " sequence number " << rtpSeqNo;
+}
+
+void RtspTcpClient::parse_frame_nal(const H264Frame& frame)
+{
+    // (Nal Unit Type) reference : https://tools.ietf.org/html/rfc6184 and https://tools.ietf.org/html/rfc3984
+    if (frame.size() < 1)
+    {
+        return;
+    }
+    uint8_t nal_type = (frame[0] & 0x1F);
+    LOG << "----------------------> nal type " << std::to_string(nal_type);
+    switch (nal_type)
+    {
+        case 28:
+        case 29:
+        {
+
+            assert(frame.size() > 2);
+
+            unsigned char startBit = frame[1] & 0x80;
+            unsigned char endBit = frame[1] & 0x40;
+
+            if (startBit)
+            {
+                assert(split_ == false);
+                split_ = true;
+                uint8_t byte = (frame[0] & 0xE0) | (frame[1] & 0x1F);
+                split_frame_.push_back(byte);
+                split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
+            }
+            if(endBit)
+            {
+                assert(split_ == true);
+                split_ = false;
+                split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
+                h264_stream_.push_back(split_frame_);
+                split_frame_.clear();
+            }
+            if(endBit == 0 && startBit == 0)
+            {
+                assert(split_ == true);
+                split_frame_.insert(split_frame_.end(), frame.begin() + 2, frame.end());
+            }
+            break;
+        }
+        default:
+        {
+            if (nal_type < 20)
+            {
+                h264_stream_.push_back(frame);
+            }
+            break;
+        }
+    }
+}
+
+void RtspTcpClient::parse_rtp_header()
+{
+    for (auto&& pkt : rtp_packets_)
+    {
+        parse_rtp_header(pkt);
+    }
+    rtp_packets_.clear();
+}
+
+void RtspTcpClient::parse_frames_nal()
+{
+    for (const auto& frame : h264_frames_)
+    {
+        parse_frame_nal(frame);
+    }
+    h264_frames_.clear();
 }
 
 void RtspTcpClient::parse_rtsp_stream()
@@ -340,19 +526,33 @@ void RtspTcpClient::parse_rtsp_stream()
         size_t size = (size1 << 8) | size2;
         if (stream_size - 4 < size)
         {
-            // Not a complete packet
-
             LOG << "Not a complete packet ";
             return;
         }
         auto begin = stream_data_.begin();
         // begin + size + 4 [1 byte $ 1 byte channel_id 2 byte size]
         auto end = begin + size + 4;
-        std::vector<uint8_t> frame(begin, begin + size);
+        std::vector<uint8_t> frame(begin + 4, begin + 4 + size);
         assert(frame.size() == size);
         assert(frame.size() <= stream_size - 4);
         stream_data_.erase(begin, end);
-        LOG << "read " << channel_id << " stream " << frame.size() << " bytes  stream size " << stream_data_.size();
+        if (channel_id == VIDEO_RTCP_CHANNEL || channel_id == AUDIO_RTCP_CHANNEL)
+        {
+            LOG << "rtcp channel " << channel_id << " read stream " << frame.size() << " bytes  stream size " << stream_data_.size();
+            continue;
+        }
+
+        if (channel_id == VIDEO_RTP_CHANNEL)
+        {
+            // check media
+            auto it = medias_map_.find(channel_id);
+            assert(it != medias_map_.end());
+            auto media = it->second;
+
+            LOG << "rtp channel " << channel_id << " read stream " << frame.size() << " bytes  stream size " << stream_data_.size();
+
+            rtp_packets_.push_back(frame);
+        }
     }
     return;
 }
@@ -366,7 +566,6 @@ void RtspTcpClient::parse_rtsp_command()
     uint8_t ch = stream_data_[0];
     if (ch == '$')
     {
-        // parse_rtsp_stream
         return;
     }
     {
@@ -422,8 +621,10 @@ void RtspTcpClient::parse_data()
     {
         return;
     }
-    parse_rtsp_stream();
     parse_rtsp_command();
+    parse_rtsp_stream();
+    parse_rtp_header();
+    parse_frames_nal();
 }
 
 void RtspTcpClient::teardown_response(const connection_ptr& conn, const Response& response)
@@ -431,7 +632,7 @@ void RtspTcpClient::teardown_response(const connection_ptr& conn, const Response
     LOG << "recv teardown response";
 }
 
-std::optional<RtspTcpClient::Media> RtspTcpClient::parse_media(const std::string& media)
+std::optional<Media> RtspTcpClient::parse_media(const std::string& media)
 {
     std::string a_type("a=");
     StringS attrs;
@@ -463,7 +664,7 @@ std::optional<RtspTcpClient::Media> RtspTcpClient::parse_media(const std::string
         }
     }
 
-    RtspTcpClient::Media m;
+    Media m;
     m.name = name;
     m.encoding_name = codec_name;
     m.control_path = path;

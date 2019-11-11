@@ -8,7 +8,7 @@ if(NOT N EQUAL 0)
     set(JOBS_IN_PARALLEL -j${N}) 
 endif(NOT N EQUAL 0)
 
-set( CMAKE_CXX_STANDARD 17 )
+set(CMAKE_CXX_STANDARD 17 )
 set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_CXX_FLAGS " -g -ggdb -O0 -Wall -Werror")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON )

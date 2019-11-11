@@ -146,8 +146,8 @@ ssize_t connection::readv_buff()
         }
 
         total_size += n;
-        LOG << "readv size " << n << " total_size " << total_size
-            << " input_buffer size " << input_buffer.size() << " input_index_ " << input_index_;
+        //LOG << "readv size " << n << " total_size " << total_size
+            //<< " input_buffer size " << input_buffer.size() << " input_index_ " << input_index_;
     }
     return total_size;
 }
@@ -209,7 +209,7 @@ void connection::write_buf()
         output_index_ -= n;
     }
 
-    LOG << "write length is : " << n << " output_buffer size " << output_buffer.size() << " ev " << _ev;
+    //LOG << "write length is : " << n << " output_buffer size " << output_buffer.size() << " ev " << _ev;
 
     if (is_write() == false)
     {
