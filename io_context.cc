@@ -13,7 +13,7 @@ public:
     IgnoreSigPipe()
     {
         ::signal(SIGPIPE, SIG_IGN);
-        log::file = stderr;
+        log_ok::file = stderr;
         LOG << "ignored SIGPIPE";
     }
 };

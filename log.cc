@@ -4,7 +4,7 @@
 #include <iomanip>
 #include "log.h"
 
-namespace log
+namespace log_ok
 {
 static std::mutex mtx;
 FILE* file;

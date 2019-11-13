@@ -11,7 +11,7 @@
 #include <sstream>
 #include <stdio.h>
 
-namespace log
+namespace log_ok
 {
 extern FILE* file;
 struct log
@@ -23,6 +23,6 @@ struct log
 
 } // namespace help
 
-#define LOG log::log(__FILE__,__FUNCTION__, __LINE__).stream_
+#define LOG log_ok::log(__FILE__,__FUNCTION__, __LINE__).stream_
 
 #endif // LOG_H_
