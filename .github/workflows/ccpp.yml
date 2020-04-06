@@ -4,9 +4,12 @@ on: [push]
 
 jobs:
   build:
-
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v1
-    - name: ./build.sh
+      - name: checkout # 步骤的名称
+        uses: actions/checkout@master #软件市场的名称
+        with: # 参数
+          submodules: true
+      - name: Build
+        run: ./build.sh
